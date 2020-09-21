@@ -60,13 +60,15 @@ class Definitions(object):
             from mathics.settings import ROOT_DIR
 
             loaded = False
-            if builtin_filename is not None:
+            if builtin_filename is not None and os.path.isfile(builtin_filename):
+                print("verifying that the builtins didn't changed after the creation of builtin_filename")
                 builtin_dates = [get_file_time(module.__file__)
                                  for module in modules]
                 builtin_time = max(builtin_dates)
                 if get_file_time(builtin_filename) > builtin_time:
+                    print("loading ", builtin_filename, "  from pickle")
                     builtin_file = open(builtin_filename, 'rb')
-                    self.builtin = pickle.load(builtin_file)
+                    self.builtin, self.pymathics, self.user, self.lookup_cache = pickle.load(builtin_file)
                     loaded = True
             if not loaded:
                 contribute(self)
@@ -79,11 +81,12 @@ class Definitions(object):
                     except ImportError as e:
                         print(e.__repr__())
                         continue
-                    #print(module + loaded_module.pymathics_version_data['version'] + "  by " + loaded_module.pymathics_version_data['author'])
+                    print(module + loaded_module.pymathics_version_data['version'] + "  by " + loaded_module.pymathics_version_data['author'])
 
                 if builtin_filename is not None:
-                    builtin_file = open(builtin_filename, 'wb')
-                    pickle.dump(self.builtin, builtin_file, -1)
+                    print("storing definitions")
+                    with open(builtin_filename, 'wb') as builtin_file:
+                        pickle.dump((self.builtin, self.pymathics, self.user, self.lookup_cache), builtin_file, -1)
 
             # Load symbols from the autoload folder
             for root, dirs, files in os.walk(os.path.join(ROOT_DIR, 'autoload')):

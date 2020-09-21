@@ -2,6 +2,7 @@
 #cython: language_level=3
 # -*- coding: utf-8 -*-
 
+import types
 
 from mathics.core.expression import Expression, strip_context, KeyComparable
 from mathics.core.pattern import Pattern, StopGenerator
@@ -125,6 +126,7 @@ class BuiltinRule(BaseRule):
             return self.function(
                 evaluation=evaluation, options=options, **vars_noctx)
         else:
+            print(self)
             return self.function(evaluation=evaluation, **vars_noctx)
 
     def __repr__(self) -> str:
@@ -133,14 +135,17 @@ class BuiltinRule(BaseRule):
     def __getstate__(self):
         odict = self.__dict__.copy()
         del odict['function']
-        odict['function_'] = (
-            self.function.__self__.get_name(), self.function.__name__)
+        if type(self.function) is types.FunctionType:
+            odict['function_'] = (
+                self.function.__self__.get_name(), self.function.__name__)
         return odict
 
     def __setstate__(self, dict):
         from mathics.builtin import builtins
-
+        print("loading state", dict)
         self.__dict__.update(dict)   # update attributes
-        cls, name = dict['function_']
-
-        self.function = getattr(builtins[cls], name)
+        if 'function_' in dict.keys():
+            func = dict['function_']
+            if type(func) is tuple:
+                cls, name = func
+                self.function = getattr(builtins[cls], name)

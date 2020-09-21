@@ -44,6 +44,39 @@ def get_option(options, name, evaluation, pop=False, evaluate=True):
 def has_option(options, name, evaluation):
     return get_option(options, name, evaluation, evaluate=False) is not None
 
+class _DefaultApplyFunction():
+    def __init__(self, obj, package):
+        self.__self__ = obj
+        self.package = package
+        # self.__name__ = "apply"
+        
+    def __call__(self,**kwargs):  # will override apply method
+        kwargs['evaluation'].message(
+            'General', 'pyimport',  # see inout.py
+            strip_context(self.__self__.get_name()), self.package)
+
+
+
+class _CheckOptions:
+    def __init__(self, parent, option_syntax="Strict"):
+        self.obj = parent
+        self.option_syntax = option_syntax
+        
+    def __call__(self, options_to_check, evaluation):
+        name = self.obj.get_name()
+        options = Builtin.options
+        for key, value in options_to_check.items():
+            short_key = strip_context(key)
+            if not has_option(options, short_key, evaluation):
+                evaluation.message(
+                    name,
+                    'optx',
+                    Expression('Rule', short_key, value),
+                    strip_context(name))
+                if self.option_syntax == 'Strict':
+                    return False
+        return True
+
 
 class Builtin(object):
     name: typing.Optional[str] = None
@@ -58,6 +91,7 @@ class Builtin(object):
 
     def __new__(cls, *args, **kwargs):
         if kwargs.get('expression', None) is not False:
+            print(cls)
             return Expression(cls.get_name(), *args)
         else:
             instance = super(Builtin, cls).__new__(cls)
@@ -70,13 +104,15 @@ class Builtin(object):
     def __init__(self, *args, **kwargs):
         super(Builtin, self).__init__()
 
+
     def contribute(self, definitions, pymodule=False):
         from mathics.core.parser import parse_builtin_rule
 
         name = self.get_name()
 
         options = {}
-        option_syntax = 'Warn'
+        self.option_syntax = 'Warn'
+        option_syntax = self.option_syntax
         for option, value in self.options.items():
             if option == '$OptionSyntax':
                 option_syntax = value
@@ -99,21 +135,8 @@ class Builtin(object):
         # - 'Strict': warn and fail with unsupported options
         # - 'Warn': warn about unsupported options, but continue
         # - 'Ignore': allow unsupported options, do not warn
-
         if option_syntax in ('Strict', 'Warn'):
-            def check_options(options_to_check, evaluation):
-                name = self.get_name()
-                for key, value in options_to_check.items():
-                    short_key = strip_context(key)
-                    if not has_option(options, short_key, evaluation):
-                        evaluation.message(
-                            name,
-                            'optx',
-                            Expression('Rule', short_key, value),
-                            strip_context(name))
-                        if option_syntax == 'Strict':
-                            return False
-                return True
+            check_options = _CheckOptions(self, option_syntax)
         elif option_syntax == 'Ignore':
             check_options = None
         else:
@@ -281,12 +304,11 @@ class Builtin(object):
             try:
                 importlib.import_module(package)
             except ImportError:
-                def apply(**kwargs):  # will override apply method
-                    kwargs['evaluation'].message(
-                        'General', 'pyimport',  # see inout.py
-                        strip_context(self.get_name()), package)
-
-                return apply
+                #def apply(**kwargs):  # will override apply method
+                #    kwargs['evaluation'].message(
+                #        'General', 'pyimport',  # see inout.py
+                #        strip_context(self.get_name()), package)
+                return _DefaultApplyFunction(self, package)
 
         return None
 
@@ -330,9 +352,10 @@ class AtomBuiltin(Builtin):
     # allows us to define apply functions, rules, messages, etc. for Atoms
     # which are by default not in the definitions' contribution pipeline.
     # see Image[] for an example of this.
-
-    def get_name(self) -> str:
-        name = super(AtomBuiltin, self).get_name()
+    @classmethod
+    def get_name(cls, short=False) -> str:
+        # name = super(AtomBuiltin, self).get_name()
+        name = super().get_name()
         return re.sub(r"Atom$", "", name)
 
 
